@@ -23,6 +23,7 @@ import org.eclipse.swt.graphics.Color;
 import org.eclipse.swt.graphics.GC;
 import org.eclipse.swt.graphics.LineAttributes;
 import org.eclipse.swt.graphics.Point;
+import org.eclipse.swt.graphics.Rectangle;
 
 import net.certiv.tools.indentguide.Activator;
 import net.certiv.tools.indentguide.preferences.Pref;
@@ -88,8 +89,8 @@ public class GuidePainter implements IPainter, PaintListener {
 
 		} else if (reason == TEXT_CHANGE) { // redraw current line only
 			try {
-				IRegion region = doc
-						.getLineInformationOfOffset(Utils.docOffset(viewer, widget.getCaretOffset()));
+				int docOffset = Utils.docOffset(viewer, widget.getCaretOffset());
+				IRegion region = doc.getLineInformationOfOffset(docOffset);
 				int offset = Utils.widgetOffset(viewer, region.getOffset());
 				int cnt = widget.getCharCount();
 				int len = Math.min(region.getLength(), cnt - offset);
@@ -120,9 +121,22 @@ public class GuidePainter implements IPainter, PaintListener {
 		// Activator.log("draw request @(%s:%s)", begLine + 1, endLine + 1);
 
 		if (begLine <= endLine && begLine < widget.getLineCount()) {
+
+			// collect state
 			Color color = gc.getForeground();
 			LineAttributes attributes = gc.getLineAttributes();
+			Rectangle clipping = gc.getClipping();
 
+			// adjust the client area
+			Rectangle clientArea = widget.getClientArea();
+			int leftMargin = widget.getLeftMargin();
+			int rightMargin = widget.getRightMargin();
+			clientArea.x += leftMargin;
+			clientArea.width -= leftMargin + rightMargin;
+			clipping.intersect(clientArea);
+			gc.setClipping(clientArea);
+
+			// draw guides
 			gc.setForeground(lineColor);
 			gc.setLineStyle(lineStyle);
 			gc.setLineWidth(lineWidth);
@@ -135,6 +149,8 @@ public class GuidePainter implements IPainter, PaintListener {
 				drawLineRange(gc, begLine, endLine, x, w);
 			}
 
+			// restore state
+			gc.setClipping(clipping);
 			gc.setForeground(color);
 			gc.setLineAttributes(attributes);
 		}
@@ -233,7 +249,8 @@ public class GuidePainter implements IPainter, PaintListener {
 
 					boolean asc = stop.col >= prevNb.endStop();
 					Point pos = widget.getLocationAtOffset(offset);
-					draw(gc, pos, stop.loc, spacing, height, asc);
+					int hx = widget.getHorizontalBar().getSelection();
+					draw(gc, pos, stop.loc + hx, spacing, height, asc);
 				}
 			}
 		}
