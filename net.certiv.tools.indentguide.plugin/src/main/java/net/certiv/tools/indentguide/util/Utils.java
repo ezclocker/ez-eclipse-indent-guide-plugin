@@ -221,31 +221,6 @@ public class Utils {
 		return (T) m.invoke(target, args);
 	}
 
-	// /**
-	// * Finds the Class (the given class or a superclass thereof) that declares a method
-	// * with the given name and parameter types.
-	// *
-	// * @param from initial object or class to consider
-	// * @param name method name
-	// * @param params method parameter types
-	// * @return Class that declares a method with the given name and parameter types, or
-	// * {@code null} if not found
-	// */
-	// public static Class<?> findMethodClass(Object from, String name, Class<?>[] params)
-	// {
-	// Class<?> cls = from instanceof Class ? (Class<?>) from : from.getClass();
-	// while (cls != null) {
-	// for (Method method : cls.getDeclaredMethods()) {
-	// if (method.getName().equals(name) //
-	// && Arrays.deepEquals(method.getParameterTypes(), params)) {
-	// return cls;
-	// }
-	// }
-	// cls = cls.getSuperclass();
-	// }
-	// return null;
-	// }
-
 	/** Restrict the range of the given val to between -1 and 1. */
 	public static int limit(int val) {
 		return (val > 1) ? 1 : (val < -1 ? -1 : val);

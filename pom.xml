@@ -2,69 +2,100 @@
 <project xmlns="http://maven.apache.org/POM/4.0.0"
 	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
 	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
-	
+
 	<modelVersion>4.0.0</modelVersion>
 	<packaging>pom</packaging>
-	
+
 	<groupId>net.certiv</groupId>
 	<artifactId>net.certiv.tools.indentguide.parent</artifactId>
 	<version>2.4.0-SNAPSHOT</version>
-	
+
 	<name>IndentGuide</name>
 	<description>IndentGuide</description>
 	<organization>
 		<name>Certiv Analytics</name>
-		<url>http://www.certiv.net/</url>
+		<url>www.certiv.net</url>
 	</organization>
 
 	<properties>
 		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-		<maven.compiler.source>17</maven.compiler.source>
-		<maven.compiler.target>17</maven.compiler.target>
-		<tycho.version>4.0.5</tycho.version>
-		<eclipse.repo.url>http://download.eclipse.org/releases/latest</eclipse.repo.url>
+		<project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
+
+		<jdk.ver>17</jdk.ver>
+		<maven.compiler.source>${jdk.ver}</maven.compiler.source>
+		<maven.compiler.target>${jdk.ver}</maven.compiler.target>
+
+		<tycho.ver>4.0.6</tycho.ver>
+		<junit.ver>5.10.2</junit.ver>
+		<surefire.ver>3.2.5</surefire.ver>
+
+		<eclipse.latest>http://download.eclipse.org/releases/latest</eclipse.latest>
 	</properties>
-	
+
+	<repositories>
+		<repository>
+			<id>eclipse</id>
+			<layout>p2</layout>
+			<url>${eclipse.latest}</url>
+		</repository>
+	</repositories>
+
 	<modules>
 		<module>net.certiv.tools.indentguide.plugin</module>
 		<module>net.certiv.tools.indentguide.feature</module>
 		<module>net.certiv.tools.indentguide.site</module>
 	</modules>
-	
-	<repositories>
-		<repository>
-			<id>eclipse</id>
-			<layout>p2</layout>
-			<url>${eclipse.repo.url}</url>
-		</repository>
-	</repositories>
 
 	<build>
 		<plugins>
 			<plugin>
 				<groupId>org.eclipse.tycho</groupId>
 				<artifactId>tycho-maven-plugin</artifactId>
-				<version>${tycho.version}</version>
+				<version>${tycho.ver}</version>
 				<extensions>true</extensions>
 			</plugin>
-			<plugin>
-				<groupId>org.apache.maven.plugins</groupId>
-				<artifactId>maven-install-plugin</artifactId>
-				<version>2.5.2</version>
-				<configuration>
-					<skip>true</skip>
-				</configuration>
-			</plugin>
+
 			<plugin>
 				<groupId>org.eclipse.tycho</groupId>
 				<artifactId>tycho-versions-plugin</artifactId>
-				<version>${tycho.version}</version>
+				<version>${tycho.ver}</version>
 			</plugin>
+
+			<plugin>
+				<groupId>org.eclipse.tycho</groupId>
+				<artifactId>tycho-compiler-plugin</artifactId>
+				<version>${tycho.ver}</version>
+				<configuration>
+					<compilerArgs>
+						<arg>-parameters</arg>
+						<arg>-warn:-raw,unchecked</arg>
+					</compilerArgs>
+					<encoding>${project.build.sourceEncoding}</encoding>
+				</configuration>
+			</plugin>
+
+			<plugin>
+				<groupId>org.eclipse.tycho</groupId>
+				<artifactId>tycho-source-plugin</artifactId>
+				<version>${tycho.ver}</version>
+				<executions>
+					<execution>
+						<id>plugin-source</id>
+						<goals>
+							<goal>plugin-source</goal>
+						</goals>
+					</execution>
+				</executions>
+			</plugin>
+
 			<plugin>
 				<groupId>org.eclipse.tycho</groupId>
 				<artifactId>target-platform-configuration</artifactId>
-				<version>${tycho.version}</version>
+				<version>${tycho.ver}</version>
 				<configuration>
+					<dependency-resolution>
+						<optionalDependencies>require</optionalDependencies>
+					</dependency-resolution>
 					<environments>
 						<environment>
 							<os>win32</os>
@@ -84,25 +115,32 @@
 					</environments>
 				</configuration>
 			</plugin>
+
 		</plugins>
-	
+
 		<pluginManagement>
 			<plugins>
 				<plugin>
 					<groupId>org.eclipse.tycho</groupId>
 					<artifactId>tycho-p2-director-plugin</artifactId>
-					<version>${tycho.version}</version>
+					<version>${tycho.ver}</version>
 				</plugin>
 				<plugin>
 					<groupId>org.eclipse.tycho</groupId>
 					<artifactId>tycho-packaging-plugin</artifactId>
-					<version>${tycho.version}</version>
+					<version>${tycho.ver}</version>
 					<configuration>
 						<format>yyyyMMdd-HHmm</format>
 						<archive>
 							<addMavenDescriptor>false</addMavenDescriptor>
 						</archive>
 					</configuration>
+				</plugin>
+
+				<plugin>
+					<groupId>org.eclipse.tycho</groupId>
+					<artifactId>tycho-surefire-plugin</artifactId>
+					<version>${tycho.ver}</version>
 				</plugin>
 			</plugins>
 		</pluginManagement>

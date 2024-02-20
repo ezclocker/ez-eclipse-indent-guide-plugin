@@ -181,7 +181,6 @@ public class GuidePainter implements IPainter, PaintListener {
 				Line line = new Line(viewer, widget, prefixMap, lnNum, tabWidth);
 
 				for (Pos stop : line) {
-					// if (skipPos(line, stop)) continue;
 					if (LineRules.skipPos(line, stop, drawLeadEdge, drawBlankLn, drawComment)) continue;
 
 					boolean asc = stop.col >= line.lastStopCol();
@@ -255,13 +254,4 @@ public class GuidePainter implements IPainter, PaintListener {
 
 	@Override
 	public void setPositionManager(IPaintPositionManager manager) {}
-
-	// void log(int delta, Line prevNb, Line currLn, Line nextNb) {
-	// Activator.log(new MsgBuilder() //
-	// .nl().append("Delta: %s", delta) //
-	// .nl().append("PrevNb: %s", prevNb) //
-	// .nl().append("CurrLn: %s", currLn) //
-	// .nl().append("NextNb: %s", nextNb)) //
-	// ;
-	// }
 }

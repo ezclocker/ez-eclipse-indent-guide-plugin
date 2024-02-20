@@ -6,11 +6,12 @@
       provider-name="Certiv Analytis">
 
    <description>
-      IndentGuide adds configurable indent guide lines in Eclipse text editors.
+      IndentGuide adds configurable indent guide lines in Eclipse text
+editors.
    </description>
 
    <copyright>
-      Copyright (c) 2006-2023 The IndentGuide Authors.
+      Copyright (c) 2006-2024 The IndentGuide Authors.
 All rights reserved.
    </copyright>
 
@@ -55,9 +56,6 @@ SOFTWARE.
 
    <plugin
          id="net.certiv.tools.indentguide"
-         download-size="0"
-         install-size="0"
-         version="0.0.0"
-         unpack="false"/>
+         version="0.0.0"/>
 
 </feature>
