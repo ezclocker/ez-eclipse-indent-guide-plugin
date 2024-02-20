@@ -1,5 +1,5 @@
 /******************************************************************************
- * Copyright (c) 2006-2023 The IndentGuide Authors.
+ * Copyright (c) 2006-2024 The IndentGuide Authors.
  * All rights reserved.
  *
  * This program and the accompanying materials are made available under the
@@ -9,6 +9,8 @@
 package net.certiv.tools.indentguide;
 
 import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
@@ -25,7 +27,6 @@ import org.eclipse.jface.text.ITextViewerExtension2;
 import org.eclipse.jface.text.source.ISourceViewer;
 import org.eclipse.jface.util.IPropertyChangeListener;
 import org.eclipse.jface.util.PropertyChangeEvent;
-import org.eclipse.ui.IEditorInput;
 import org.eclipse.ui.IEditorPart;
 import org.eclipse.ui.IStartup;
 import org.eclipse.ui.IWorkbench;
@@ -52,6 +53,7 @@ import net.certiv.tools.indentguide.util.Utils.Delta;
 
 public class Starter implements IStartup {
 
+	private static final String JOB_NAME = "IndentGuide Startup"; // $NON-NLS-1$
 	private static final String ACTIVE_EDITOR = "getActiveEditor"; // $NON-NLS-1$
 	private static final String SOURCE_VIEWER = "getSourceViewer"; // $NON-NLS-1$
 
@@ -66,7 +68,7 @@ public class Starter implements IStartup {
 
 	@Override
 	public void earlyStartup() {
-		UIJob job = new UIJob("Indent Guide Startup") {
+		UIJob job = new UIJob(JOB_NAME) {
 
 			@Override
 			public IStatus runInUIThread(IProgressMonitor monitor) {
@@ -112,22 +114,23 @@ public class Starter implements IStartup {
 
 		IContentType type = typeOf(editor);
 		boolean valid = valid(type);
-		Activator.log("painter %sallowed for '%s' [%s]", valid ? "" : "dis", srcname(editor), type.getName());
+		// Activator.log("painter %sallowed for '%s' [%s]", valid ? "" : "dis",
+		// srcname(editor), type.getName());
 		if (!valid) return;
 
 		try {
 			ISourceViewer viewer = Utils.invoke(editor, SOURCE_VIEWER);
-
 			if (viewer instanceof ITextViewerExtension2) {
 				Data data = findRecord(part, editor);
 				if (data == null) {
-					data = new Data(part, editor, type, viewer);
+					Map<String, List<String>> prefixes = Utils.prefixesFor(viewer);
+					data = new Data(part, editor, type, viewer, prefixes);
 					datas.add(data);
 				}
 				if (data.painter == null) {
-					data.painter = new GuidePainter(viewer);
+					data.painter = new GuidePainter(viewer, data.prefixes);
 					((ITextViewerExtension2) viewer).addPainter(data.painter);
-					Activator.log("painter installed");
+					// Activator.log("painter installed");
 				}
 
 			} else {
@@ -185,10 +188,10 @@ public class Starter implements IStartup {
 		return Utils.getPlatformTextType(Utils.UNKNOWN);
 	}
 
-	private String srcname(AbstractTextEditor editor) {
-		IEditorInput src = editor.getEditorInput();
-		return src != null ? src.getName() : Utils.UNKNOWN;
-	}
+	// private String srcname(AbstractTextEditor editor) {
+	// IEditorInput src = editor.getEditorInput();
+	// return src != null ? src.getName() : Utils.UNKNOWN;
+	// }
 
 	private void updateContentTypes() {
 		excludedTypeIds = Utils.undelimit(store.getString(Pref.CONTENT_TYPES));
@@ -328,13 +331,17 @@ public class Starter implements IStartup {
 		AbstractTextEditor editor;
 		IContentType type;
 		ISourceViewer viewer;
+		Map<String, List<String>> prefixes;
+
 		GuidePainter painter;
 
-		Data(IWorkbenchPart part, AbstractTextEditor editor, IContentType type, ISourceViewer viewer) {
+		Data(IWorkbenchPart part, AbstractTextEditor editor, IContentType type, ISourceViewer viewer,
+				Map<String, List<String>> prefixes) {
 			this.part = part;
 			this.editor = editor;
 			this.type = type;
 			this.viewer = viewer;
+			this.prefixes = prefixes;
 		}
 
 		@Override

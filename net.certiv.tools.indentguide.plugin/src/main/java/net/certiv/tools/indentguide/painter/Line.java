@@ -1,5 +1,5 @@
 /******************************************************************************
- * Copyright (c) 2006-2023 The IndentGuide Authors.
+ * Copyright (c) 2006-2024 The IndentGuide Authors.
  * All rights reserved.
  *
  * This program and the accompanying materials are made available under the
@@ -9,17 +9,32 @@
 package net.certiv.tools.indentguide.painter;
 
 import java.util.Iterator;
-import java.util.LinkedList;
+import java.util.List;
+import java.util.Map;
 import java.util.regex.Pattern;
 
+import org.eclipse.jface.text.ITextViewer;
 import org.eclipse.swt.custom.StyledText;
-import org.eclipse.swt.graphics.Point;
 
 import net.certiv.tools.indentguide.util.MsgBuilder;
 import net.certiv.tools.indentguide.util.Utils;
 
+/**
+ * Describes a single code line in a source file. Contains a {@link LineInfo} that details
+ * tab stop positions.
+ * <p>
+ * The info is nominally computed for the current line.
+ * <p>
+ * If the currrent line is blank, the info is computed from the first prior real
+ * (non-blank/non-column zero comment) line. If no such line exists, the info is computed
+ * for the current blank line.
+ * <p>
+ * Another info is also computed from the first next real line in order to determine a
+ * delta dentation change {@code [- <- 0 -> +]} between the prior and next real lines.
+ */
 public class Line implements Iterable<Pos> {
 
+	/** Block comment pattern. */
 	private static final Pattern COMMENT = Pattern.compile( //
 			"^(?:\\h*(?:" 					// $NON-NLS-1$
 					+ "/\\*.*|"				// $NON-NLS-1$ -> ^'/*'.*$
@@ -30,109 +45,133 @@ public class Line implements Iterable<Pos> {
 					+ "))$" 				// $NON-NLS-1$
 	);
 
-	/** The control */
-	public final StyledText widget;
-	/** The line number (0..n) */
-	public final int line;
-	/** The line text */
-	public final String txt;
-	/** The assigned tab width */
-	public final int tabwidth;
+	// ---- Global data ---------------
 
-	/** Is a blank line */
-	public final boolean blank;
-	/** The raw line length */
-	public final int length;
-	/** Is a block comment body line */
-	public final boolean comment;
+	/** Viewer */
+	final ITextViewer viewer;
+	/** Control */
+	final StyledText widget;
+	/** Partition specific line prefixes by partition type */
+	final Map<String, List<String>> prefixMap;
+	/** Defined tab width */
+	final int tabWidth;
 
-	/** List of the lead tab stops */
-	public final LinkedList<Pos> stops = new LinkedList<>();
+	// ---- Current Line Data ---------
 
-	/** First visible text column */
-	public final int beg;
+	/** Line number (0..n) */
+	final int lnNum;
+	/** Blank line */
+	final boolean blank;
+	/** In block comment */
+	final boolean block;
+	/** Column 0 line comment */
+	final boolean cmt0;
+	/** Current line text; may be blank, etc. */
+	final String txt;
 
-	/** Change in indents between non-blank lines surrounding this line. */
-	public int delta;
+	/** Target Line Info */
+	LineInfo info;
+	/** No indent stops (excluding column 0 stop) */
+	boolean noDents;
 
-	public static Line of(StyledText widget, int line, int tabwidth) {
-		return new Line(widget, line, tabwidth);
-	}
+	/** Delta dentation for this line */
+	int delta;
+	/** Zero delta */
+	boolean delta0;
+
+	// --------------------------------
 
 	/**
-	 * Creates a new Line.
+	 * Describes one line, including the state of the line itself, and the reference lines
+	 * before and after this line.
 	 *
-	 * @param widget
-	 * @param line     the line number (0..n) within the widget
-	 * @param tabwidth the document defined tabwidth
+	 * @param viewer    containing text viewer
+	 * @param widget    containing widget control
+	 * @param prefixMap line comment prefixes by partition type
+	 * @param lnNum     line number (0..n) within the widget
+	 * @param tabWidth  tab width
 	 */
-	public Line(StyledText widget, int line, int tabwidth) {
+	public Line(ITextViewer viewer, StyledText widget, Map<String, List<String>> prefixMap, int lnNum,
+			int tabWidth) {
+		this.viewer = viewer;
 		this.widget = widget;
-		this.line = line;
-		this.txt = widget != null ? widget.getLine(line) : Utils.EMPTY;
-		this.tabwidth = tabwidth;
+		this.prefixMap = prefixMap;
+		this.lnNum = lnNum;
+		this.tabWidth = tabWidth;
 
-		blank = this.txt.isBlank();
-		length = this.txt.length();
+		txt = widget.getLine(lnNum);
+		blank = txt.isBlank();
+		block = !blank && COMMENT.matcher(txt).matches();
+		cmt0 = isCol0Comment(lnNum, txt);
 
-		stops.add(Pos.P0);
-		beg = process();
-		comment = inBlockComment();
+		processLine();
+
+		noDents = stopCnt() == 1;
+		delta0 = delta == 0;
 	}
 
-	private int process() {
-		int beg = 0;
-		for (int pos = 0, col = 0; pos < length; pos++) {
-			int ch = txt.codePointAt(pos);
-			switch (ch) {
-				case Utils.SPC:
-					beg = col += Character.charCount(ch);
-					if (col % tabwidth == 0) stops.add(pos(stops.size(), pos + 1, col));
-					break;
-
-				case Utils.TAB:
-					beg = col += tabwidth - (col % tabwidth);
-					stops.add(pos(stops.size(), pos + 1, col));
-					break;
-
-				default:
-					beg = col;
-					return beg;
+	private void processLine() {
+		int num = blank ? findPrev(lnNum) : lnNum;
+		info = new LineInfo(widget, num, tabWidth);
+		if (blank) {
+			LineInfo next = new LineInfo(widget, findNext(lnNum), tabWidth);
+			delta = next.stopCnt() - info.stopCnt();
+			for (int dec = delta; dec < 0; dec++) {
+				info.removeLast(); // shift out (-) by one
 			}
 		}
-		return beg;
-	}
-
-	private Pos pos(int idx, int pos, int col) {
-		int offset = widget.getOffsetAtLine(line);
-		Point loc = widget.getLocationAtOffset(offset + pos);
-		return Pos.at(idx, pos, col, loc.x);
-	}
-
-	private boolean inBlockComment() {
-		if (blank) return false;
-
-		int pos = stops.peekLast().pos;
-		String rem = txt.substring(pos);
-		return COMMENT.matcher(rem).matches();
 	}
 
 	/**
-	 * Return the number of tab stops
+	 * Find the next real (non-blank/non-col0 comment) line num starting after the given
+	 * line number. If none exists, returns the given line number.
 	 *
-	 * @return tab stop count
+	 * @param num reference line number
 	 */
-	public int tabs() {
-		return stops.size();
+	private int findNext(int num) {
+		for (int next = num + 1, end = widget.getLineCount(); next < end; next++) {
+			String txt = widget.getLine(next);
+			if (!txt.isBlank() && !isCol0Comment(next, txt)) return next;
+		}
+		return num;
 	}
 
 	/**
-	 * Return {@code true} if the number of tab stops equals the given {@code cnt}.
+	 * Find the prior real (non-blank/non-col0 comment) line num starting before the given
+	 * line number. If none exists, returns the given line number.
 	 *
-	 * @return {@code true} if the tab stop count equals {@code cnt}.
+	 * @param num reference line number
 	 */
-	public boolean tabs(int cnt) {
-		return stops.size() == cnt;
+	private int findPrev(int num) {
+		for (int prev = num - 1; prev >= 0; prev--) {
+			String txt = widget.getLine(prev);
+			if (!txt.isBlank() && !isCol0Comment(prev, txt)) return prev;
+		}
+		return num;
+	}
+
+	private boolean isCol0Comment(int num, String txt) {
+		if (txt.isBlank()) return false;
+
+		List<String> prefixes = prefixMap.get(Utils.partitionType(viewer, num));
+		return prefixes.stream().anyMatch(p -> txt.startsWith(p));
+	}
+
+	/**
+	 * Return the column of the first text character.
+	 *
+	 * @return first text column
+	 */
+	int textCol() {
+		return info.beg;
+	}
+
+	Pos firstStop() {
+		return info.stops.peekFirst();
+	}
+
+	Pos lastStop() {
+		return info.stops.peekLast();
 	}
 
 	/**
@@ -140,23 +179,54 @@ public class Line implements Iterable<Pos> {
 	 *
 	 * @return the last stop column
 	 */
-	public int endStop() {
-		return !stops.isEmpty() ? stops.peekLast().col : 0;
+	int lastStopCol() {
+		return info.lastStop().col;
 	}
+
+	/**
+	 * Returns the stop position at the given index in the stop list.
+	 *
+	 * @param idx stop position index
+	 * @return stop position
+	 * @throws IndexOutOfBoundsException
+	 */
+	Pos stop(int idx) {
+		return info.stops.get(idx);
+	}
+
+	/**
+	 * Return the total number of stop positions.
+	 *
+	 * @return stop position count
+	 */
+	int stopCnt() {
+		return info.stopCnt();
+	}
+
+	/**
+	 * Return {@code true} if the number of tab stops equals the given {@code cnt}.
+	 *
+	 * @return {@code true} if the tab stop count is {@code cnt}.
+	 */
+	boolean stopCntEquals(int cnt) {
+		return stopCnt() == cnt;
+	}
+
+	// --------------------------------
 
 	@Override
 	public Iterator<Pos> iterator() {
-		return stops.iterator();
+		return info.iterator();
 	}
 
 	@Override
 	public String toString() {
 		MsgBuilder mb = new MsgBuilder() //
-				.append("Line %s:", line) //
-				.append(" %s", stops) //
-				.append(blank, " %s", "Blank") //
-				.append(!blank, " %s[%s]", beg, length) //
-				.append("\t %s", Utils.encode(txt));
+				.append("Line %d", lnNum) //
+				.append(lnNum != info.num, "(%d)", info.num) //
+				.append(": %s", info.stops) //
+				.append(blank, " @0\t<blank>") //
+				.append(!blank, " @%d\t'%s'", info.beg, Utils.encode(info.txt));
 		return mb.toString();
 	}
 }

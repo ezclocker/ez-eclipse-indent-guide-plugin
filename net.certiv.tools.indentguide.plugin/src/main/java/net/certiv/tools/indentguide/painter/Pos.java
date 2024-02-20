@@ -1,5 +1,5 @@
 /******************************************************************************
- * Copyright (c) 2006-2023 The IndentGuide Authors.
+ * Copyright (c) 2006-2024 The IndentGuide Authors.
  * All rights reserved.
  *
  * This program and the accompanying materials are made available under the
@@ -10,27 +10,53 @@ package net.certiv.tools.indentguide.painter;
 
 import java.util.Objects;
 
+import org.eclipse.swt.custom.StyledText;
+import org.eclipse.swt.graphics.Point;
+
 public class Pos {
 
 	public static final Pos P0 = Pos.at(0, 0, 0, 1);
 
 	/** Stop index in line (0..n). */
-	public final int idx;
+	public final int stop;
 
 	/** Char position in line (0..n); unexpanded. */
 	public final int pos;
 	/** Visual column in line (0..n); expanded. */
 	public final int col;
 
-	/** Location (x pixel offset) in widget line. */
+	/** Location (X pixel offset) in widget line. */
 	public final int loc;
 
-	public static Pos at(int idx, int pos, int col, int loc) {
-		return new Pos(idx, pos, col, loc);
+	/**
+	 * @param widget containing widget
+	 * @param lnNum  line number
+	 * @param stop   stop index in line (0..n)
+	 * @param pos    char position in line (0..n)
+	 * @param col    visual column in line (0..n); pos expanded
+	 * @return stop position
+	 */
+	public static Pos at(StyledText widget, int lnNum, int stop, int pos, int col) {
+		int offset = widget.getOffsetAtLine(lnNum);
+		Point loc = widget.getLocationAtOffset(offset + pos);
+		return new Pos(stop, pos, col, loc.x);
 	}
 
-	private Pos(int idx, int pos, int col, int loc) {
-		this.idx = idx;
+	/**
+	 * @param stop stop index in line (0..n)
+	 * @param pos  char position in line (0..n)
+	 * @param col  visual column in line (0..n); pos expanded
+	 * @param loc  X pixel offset in line
+	 * @return stop position
+	 */
+	private static Pos at(int stop, int pos, int col, int loc) {
+		return new Pos(stop, pos, col, loc);
+	}
+
+	// --------------------------------
+
+	private Pos(int stop, int pos, int col, int loc) {
+		this.stop = stop;
 		this.pos = pos;
 		this.col = col;
 		this.loc = loc;

@@ -1,10 +1,22 @@
+/******************************************************************************
+ * Copyright (c) 2006-2024 The IndentGuide Authors.
+ * All rights reserved.
+ *
+ * This program and the accompanying materials are made available under the
+ * terms of the MIT License.  A copy of the MIT License is included this
+ * distribution and is available at https://opensource.org/licenses/MIT.
+ *****************************************************************************/
 package net.certiv.tools.indentguide.util;
 
+import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.LinkedList;
+import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.StringTokenizer;
@@ -21,9 +33,12 @@ import org.eclipse.jface.layout.PixelConverter;
 import org.eclipse.jface.preference.IPreferenceStore;
 import org.eclipse.jface.preference.PreferenceConverter;
 import org.eclipse.jface.resource.StringConverter;
+import org.eclipse.jface.text.BadLocationException;
+import org.eclipse.jface.text.IDocument;
 import org.eclipse.jface.text.IRegion;
 import org.eclipse.jface.text.ITextViewer;
 import org.eclipse.jface.text.ITextViewerExtension5;
+import org.eclipse.jface.text.source.ISourceViewer;
 import org.eclipse.swt.custom.StyledText;
 import org.eclipse.swt.graphics.Color;
 import org.eclipse.swt.graphics.GC;
@@ -33,6 +48,7 @@ import org.eclipse.ui.PlatformUI;
 import org.eclipse.ui.texteditor.AbstractTextEditor;
 import org.eclipse.ui.themes.ColorUtil;
 
+import net.certiv.tools.indentguide.Activator;
 import net.certiv.tools.indentguide.adaptors.ContentTypeAdaptor;
 import net.certiv.tools.indentguide.preferences.Pref;
 
@@ -40,14 +56,16 @@ public class Utils {
 
 	public static final char SPC = ' '; // $NON-NLS-1$
 	public static final char DOT = '.'; // $NON-NLS-1$
+	public static final char MARK = '\''; // $NON-NLS-1$
 	public static final char TAB = '\t'; // $NON-NLS-1$
 	public static final char NLC = '\n'; // $NON-NLS-1$
 	public static final char RET = '\r'; // $NON-NLS-1$
 
+	public static final String EOL = System.lineSeparator();
 	public static final String EMPTY = ""; // $NON-NLS-1$
 	public static final String SPACE = " "; // $NON-NLS-1$
 	public static final String DELIM = "|"; // $NON-NLS-1$
-	public static final String EOL = System.lineSeparator();
+	public static final String UNKNOWN = "Unknown"; // $NON-NLS-1$
 
 	public static final char SP_THIN = '\u2009';	//
 	public static final char SP_MARK = '\u00b7';	// ·
@@ -55,92 +73,178 @@ public class Utils {
 	public static final char RET_MARK = '\u00a4';	// ¤
 	public static final char NL_MARK = '\u00b6';	// ¶
 
-	public static final String UNKNOWN = "Unknown"; // $NON-NLS-1$
 	public static final Class<?>[] NoParams = new Class<?>[0];
 	public static final Object[] NoArgs = new Object[0];
 
-	private static final String EditorsID = "org.eclipse.ui.editors"; //$NON-NLS-1$
+	public static final String EditorsID = "org.eclipse.ui.editors"; //$NON-NLS-1$
+
 	private static final IEclipsePreferences[] Scopes = new IEclipsePreferences[] {
 			InstanceScope.INSTANCE.getNode(EditorsID), //
 			DefaultScope.INSTANCE.getNode(EditorsID) //
 	};
+
+	// TextViewer#fDefaultPrefixChars
+	private static final String PREFIXES = "fDefaultPrefixChars"; // $NON-NLS-1$
+
+	public static final String DefContentType = "__dftl_partition_content_type"; //$NON-NLS-1$
+	public static final String JavaContentType = "__java_character"; //$NON-NLS-1$
 
 	private static Set<IContentType> platformTextTypes;
 	private static IContentType txtType;
 
 	private Utils() {}
 
+	/**
+	 * Returns the line prefixes defined for the given viewer. Filters all {@code null} or
+	 * empty prefix strings.
+	 *
+	 * @param viewer document viewer
+	 * @return map of {@code key=doc partition type; value=prefixes}
+	 * @throws Exception on any failure to extract or filter the prefix map
+	 */
+	public static Map<String, List<String>> prefixesFor(ISourceViewer viewer) throws Exception {
+		Map<String, List<String>> prefixes = new HashMap<>();
+		Map<String, String[]> map = getValue(viewer, PREFIXES);
+		map.forEach((k, v) -> {
+			List<String> vals = Arrays.stream(v) //
+					.filter(p -> p != null && !p.isBlank()) //
+					.toList();
+			prefixes.put(k, vals);
+		});
+		return prefixes;
+	}
+
 	/** Returns the class name of the given object, or {@code UNKNOWN} if {@code null}. */
 	public static String nameOf(Object obj) {
 		return nameOf(obj, UNKNOWN);
 	}
 
-	/** Returns the class name of the given object, or the given default if {@code null}. */
+	/**
+	 * Returns the class name of the given object, or the given default if {@code null}.
+	 */
 	public static String nameOf(Object obj, String def) {
 		return obj != null ? obj.getClass().getName() : def;
 	}
 
 	/**
-	 * Invoke the method corresponding to the given method name having no parameters on the given
-	 * target object. The method may be private. Invokes the first matching method found in the
-	 * class hierarchy of the given target.
+	 * Finds the field with the given name from the given class or a superclass thereof.
 	 *
-	 * @param <T>    the return object type
-	 * @param target the invocation target object
-	 * @param name   the method name
-	 * @return the invocation result
-	 * @throws Throwable on any failure
+	 * @param from initial object or class to consider
+	 * @param name field name
+	 * @return field with the given name, or {@code null} if not found
 	 */
-	public static <T> T invoke(Object target, String methodName) throws Throwable {
-		return invoke(target, methodName, NoParams, NoArgs);
-	}
-
-	/**
-	 * Invoke the method corresponding to the given method name and parameter types on the given
-	 * target object. The method may be private. Invokes the first matching method found in the
-	 * class hierarchy of the given target.
-	 *
-	 * @param <T>    the return object type
-	 * @param target the invocation target object
-	 * @param name   the method name
-	 * @param params the method parameter types
-	 * @param args   the method parameter arguments
-	 * @return the invocation result
-	 * @throws Throwable on any failure
-	 */
-	@SuppressWarnings("unchecked")
-	public static <T> T invoke(Object target, String name, Class<?>[] params, Object[] args) throws Throwable {
-		Class<?> cls = find(target.getClass(), name, params);
-		Method m = cls.getDeclaredMethod(name, params);
-		m.setAccessible(true);
-		return (T) m.invoke(target, args);
-	}
-
-	/**
-	 * Finds the Class (the given class or a superclass thereof) that declares a method with the
-	 * given name and parameter types.
-	 *
-	 * @param from   the initial class to consider
-	 * @param name   the target method name
-	 * @param params the target method parameter types
-	 * @return the Class that declares a method with the given name and parameter types, or
-	 *         {@code null} if not found
-	 */
-	public static Class<?> find(Class<?> from, String name, Class<?>[] params) {
-		Class<?> cls = from;
+	public static Field findField(Object from, String name) {
+		Class<?> cls = from instanceof Class ? (Class<?>) from : from.getClass();
 		while (cls != null) {
-			Method[] methods = cls.getDeclaredMethods();
-			for (Method method : methods) {
-				if (method.getName().equals(name)) {
-					if (Arrays.equals(method.getParameterTypes(), params)) {
-						return cls;
-					}
+			for (Field field : cls.getDeclaredFields()) {
+				if (field.getName().equals(name)) return field;
+			}
+			cls = cls.getSuperclass();
+		}
+		return null;
+	}
+
+	/**
+	 * Finds the method with the given name and parameter types from the given class or a
+	 * superclass thereof.
+	 *
+	 * @param from   initial object or class to consider
+	 * @param name   method name
+	 * @param params method parameter types
+	 * @return method with the given name and parameter types, or {@code null} if not
+	 *         found
+	 */
+	public static Method findMethod(Object from, String name, Class<?>[] params) {
+		Class<?> cls = from instanceof Class ? (Class<?>) from : from.getClass();
+		while (cls != null) {
+			for (Method method : cls.getDeclaredMethods()) {
+				if (method.getName().equals(name) //
+						&& Arrays.deepEquals(method.getParameterTypes(), params)) {
+					return method;
 				}
 			}
 			cls = cls.getSuperclass();
 		}
 		return null;
 	}
+
+	/**
+	 * Returns the value of the field identified by the given name in the given target
+	 * object. The value is automatically wrapped in an object if it has a primitive type.
+	 *
+	 * @param <T>    return object type
+	 * @param target invocation target object
+	 * @param name   field name
+	 * @return resultant value
+	 * @throws Exception on any failure
+	 */
+	@SuppressWarnings("unchecked")
+	public static <T> T getValue(Object target, String name) throws Exception {
+		Field f = findField(target, name);
+		f.setAccessible(true);
+		return (T) f.get(target);
+	}
+
+	/**
+	 * Invoke the method corresponding to the given method name having no parameters on
+	 * the given target object. The method may be private. Invokes the first matching
+	 * method found in the class hierarchy of the given target.
+	 *
+	 * @param <T>    the return object type
+	 * @param target the invocation target object
+	 * @param name   the method name
+	 * @return the invocation result
+	 * @throws Exception on any failure
+	 */
+	public static <T> T invoke(Object target, String name) throws Exception {
+		return invoke(target, name, NoParams, NoArgs);
+	}
+
+	/**
+	 * Invoke the method corresponding to the given method name and parameter types on the
+	 * given target object. The method may be private. Invokes the first matching method
+	 * found in the class hierarchy of the given target.
+	 *
+	 * @param <T>    return object type
+	 * @param target invocation target object
+	 * @param name   method name
+	 * @param params method parameter types
+	 * @param args   method parameter arguments
+	 * @return invocation result
+	 * @throws Exception on any failure
+	 */
+	@SuppressWarnings("unchecked")
+	public static <T> T invoke(Object target, String name, Class<?>[] params, Object[] args)
+			throws Exception {
+		Method m = findMethod(target, name, params);
+		m.setAccessible(true);
+		return (T) m.invoke(target, args);
+	}
+
+	// /**
+	// * Finds the Class (the given class or a superclass thereof) that declares a method
+	// * with the given name and parameter types.
+	// *
+	// * @param from initial object or class to consider
+	// * @param name method name
+	// * @param params method parameter types
+	// * @return Class that declares a method with the given name and parameter types, or
+	// * {@code null} if not found
+	// */
+	// public static Class<?> findMethodClass(Object from, String name, Class<?>[] params)
+	// {
+	// Class<?> cls = from instanceof Class ? (Class<?>) from : from.getClass();
+	// while (cls != null) {
+	// for (Method method : cls.getDeclaredMethods()) {
+	// if (method.getName().equals(name) //
+	// && Arrays.deepEquals(method.getParameterTypes(), params)) {
+	// return cls;
+	// }
+	// }
+	// cls = cls.getSuperclass();
+	// }
+	// return null;
+	// }
 
 	/** Restrict the range of the given val to between -1 and 1. */
 	public static int limit(int val) {
@@ -239,8 +343,29 @@ public class Utils {
 	}
 
 	/**
-	 * Returns the text content types known to the platform at plugin startup. Includes an 'UNKNOWN'
-	 * placeholder entry for unknown/undefined content types
+	 * Return the partition type of the document held in the given viewer at the given
+	 * line.
+	 *
+	 * @param viewer text viewer
+	 * @param line   document line number
+	 * @return partition type
+	 */
+	public static String partitionType(ITextViewer viewer, int line) {
+		try {
+			IDocument doc = viewer.getDocument();
+			if (doc != null && line > -1) {
+				return doc.getContentType(line);
+			}
+		} catch (BadLocationException e) {
+			// Activator.log("Prefix analysis failure on line %d [%s].", line,
+			// e.getMessage());
+		}
+		return DefContentType;
+	}
+
+	/**
+	 * Returns the text content types known to the platform at plugin startup. Includes an
+	 * 'UNKNOWN' placeholder entry for unknown/undefined content types
 	 *
 	 * @return the known text content type identifiers
 	 */
@@ -276,7 +401,8 @@ public class Utils {
 	/**
 	 * Returns the platform text content type matching the given type identifier.
 	 *
-	 * @return the text content type for the given identifier, or {@code null} if not found
+	 * @return the text content type for the given identifier, or {@code null} if not
+	 *         found
 	 */
 	public static IContentType getPlatformTextType(String id) {
 		return platformTextTypes().stream().filter(t -> t.getId().equals(id)).findFirst().orElse(null);
@@ -295,7 +421,8 @@ public class Utils {
 	}
 
 	/**
-	 * Convert a set of content types to a delimited string suitable for preference storage.
+	 * Convert a set of content types to a delimited string suitable for preference
+	 * storage.
 	 *
 	 * @param terms set containing the individual terms
 	 * @return a delimited string of preference terms
@@ -414,8 +541,8 @@ public class Utils {
 	}
 
 	/**
-	 * Sets the widget to always use the operating system's advanced graphics subsystem for all
-	 * graphics operations.
+	 * Sets the widget to always use the operating system's advanced graphics subsystem
+	 * for all graphics operations.
 	 *
 	 * @param widget
 	 * @return
@@ -438,8 +565,8 @@ public class Utils {
 	}
 
 	/**
-	 * Returns {@code true} if the current platform theme is 'dark'; empirically defined where the
-	 * editor foreground color is relatively darker than the background color.
+	 * Returns {@code true} if the current platform theme is 'dark'; empirically defined
+	 * where the editor foreground color is relatively darker than the background color.
 	 * <p>
 	 * black -> '0'; white -> '255*3'
 	 */
@@ -454,4 +581,26 @@ public class Utils {
 		if (value == null) return PreferenceConverter.COLOR_DEFAULT_DEFAULT;
 		return StringConverter.asRGB(value, PreferenceConverter.COLOR_DEFAULT_DEFAULT);
 	}
+
+	public static int docLine(ITextViewer viewer, int line) {
+		StyledText widget = viewer.getTextWidget();
+		int offset = widget.getOffsetAtLine(line);
+		return widget.getLineAtOffset(offset);
+	}
+
+	public static boolean zeroColComment(ITextViewer viewer, int line, Map<String, List<String>> prefixMap,
+			String text) {
+
+		String type = partitionType(viewer, line);
+		List<String> prefixes = prefixMap.get(type);
+
+		int docLine = docLine(viewer, line);
+		Activator.log("Checking %s %s @%d: %s", type, prefixes, docLine, text);
+
+		for (String prefix : prefixes) {
+			if (text.startsWith(prefix)) return true;
+		}
+		return false;
+	}
+
 }

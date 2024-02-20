@@ -1,57 +1,134 @@
 package net.certiv.tools.indentguide.painter;
 
+import static net.certiv.tools.indentguide.TestSupport.TABWIDTH;
+import static net.certiv.tools.indentguide.TestSupport.loadResource;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import org.eclipse.swt.SWT;
-import org.eclipse.swt.graphics.Font;
-import org.eclipse.swt.graphics.FontData;
+import java.util.List;
+import java.util.Map;
+
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvFileSource;
 
-class LineTest extends TestBase {
+import net.certiv.tools.indentguide.TestSupport;
+import net.certiv.tools.indentguide.util.Utils;
 
-	private static final int TABWIDTH = 4;
+class LineTest {
 
-	@ParameterizedTest
-	@CsvFileSource(resources = "/line_base_data.csv", quoteCharacter = '\'')
-	void testLine(String txt, int len, boolean blank, int cnt, String last, int beg) {
+	static final TestSupport TS = new TestSupport();
+	String src0;
+	String src1;
+	Map<String, List<String>> map;
 
-		int size = 11;
-		String name = fontnames[3];
-		FontData fd = new FontData(name, size, SWT.NORMAL);
-		Font font = new Font(widget.getDisplay(), fd);
+	@BeforeEach
+	void setup() {
+		TS.setUp();
+		if (src0 == null) {
+			src0 = assertDoesNotThrow(() -> loadResource(getClass(), "TestSrc0.txt"));
+		}
+		if (src1 == null) {
+			src1 = assertDoesNotThrow(() -> loadResource(getClass(), "TestSrc1.txt"));
+		}
+		if (map == null) {
+			map = assertDoesNotThrow(() -> Utils.prefixesFor(TS.viewer));
+		}
+	}
 
-		gc.setFont(font);
-		widget.setFont(font);
-		widget.setTabs(TABWIDTH);
-		widget.setText(txt);
+	@AfterEach
+	void tearDown() {
+		TS.tearDown();
+	}
 
-		Line ln = new Line(widget, 0, TABWIDTH);
+	@Test
+	void testBase() {
+		assertEquals(1, TS.widget.getLineCount());
+		assertEquals(TS.DummyText, TS.widget.getLine(0));
+	}
 
-		assertEquals(ln.blank, blank, "Blank");
-		assertEquals(ln.beg, beg, "Visual col");
-		assertEquals(ln.length, len, "Length");
-		assertEquals(ln.stops.size(), cnt, "Stop count");
-		// assertEquals(ln.stops.peekLast().toString(), last, "Last stop");
+	@Test
+	void testLine() {
+		Line ln = new Line(TS.viewer, TS.widget, map, 0, TABWIDTH);
+		assertFalse(ln.blank);
+		assertEquals(0, ln.textCol());
+		assertEquals(1, ln.stopCnt());
+
+		TS.widget.setText(Utils.TAB + TS.DummyText);
+		ln = new Line(TS.viewer, TS.widget, map, 0, TABWIDTH);
+		assertFalse(ln.blank);
+		assertEquals(4, ln.textCol());
+		assertEquals(2, ln.stopCnt());
+
+		TS.widget.setText("  ");
+		ln = new Line(TS.viewer, TS.widget, map, 0, TABWIDTH);
+		assertTrue(ln.blank);
+		assertEquals(2, ln.textCol());
+		assertEquals(1, ln.stopCnt());
+
+		TS.widget.setText("  " + TS.DummyText);
+		ln = new Line(TS.viewer, TS.widget, map, 0, TABWIDTH);
+		assertFalse(ln.blank);
+		assertEquals(2, ln.textCol());
+		assertEquals(1, ln.stopCnt());
 	}
 
 	@ParameterizedTest
-	@CsvFileSource(resources = "/line_cmt_data.csv", quoteCharacter = '\'')
+	@CsvFileSource(resources = "/line_comments.csv", quoteCharacter = Utils.MARK)
 	void testComment(String txt) {
+		TS.widget.setText(txt);
+		Line ln = new Line(TS.viewer, TS.widget, map, 0, TABWIDTH);
 
-		int size = 11;
-		String name = fontnames[3];
-		FontData fd = new FontData(name, size, SWT.NORMAL);
-		Font font = new Font(widget.getDisplay(), fd);
+		assertTrue(ln.block, "Comment");
+	}
 
-		gc.setFont(font);
-		widget.setFont(font);
-		widget.setTabs(TABWIDTH);
-		widget.setText(txt);
+	@ParameterizedTest
+	@CsvFileSource(resources = "/line_single.csv", quoteCharacter = Utils.MARK)
+	void testSingle(String txt, int len, boolean blank, int cnt, String last, int beg) {
+		TS.widget.setText(txt);
+		Line ln = new Line(TS.viewer, TS.widget, map, 0, TABWIDTH);
 
-		Line ln = new Line(widget, 0, TABWIDTH);
+		assertEquals(blank, ln.blank, "Blank");
+		assertEquals(beg, ln.textCol(), "Beg");
+		assertEquals(len, ln.info.txt.length(), "Length");
+		assertEquals(cnt, ln.stopCnt(), "Stop count");
+	}
 
-		assertTrue(ln.comment, "Comment");
+	@ParameterizedTest
+	@CsvFileSource(resources = "/line_multi_src0.csv", numLinesToSkip = 1)
+	void testMultiSrc0(int idx, int num, boolean blank, boolean block, boolean cmt0, int real, int cnt,
+			int delta, int beg) {
+
+		TS.widget.setText(src0);
+		Line ln = new Line(TS.viewer, TS.widget, map, num, TABWIDTH);
+
+		assertEquals(blank, ln.blank, "Blank");
+		assertEquals(block, ln.block, "Block");
+		assertEquals(cmt0, ln.cmt0, "Cmt0");
+		assertEquals(real, ln.info.num, "Real");
+		assertEquals(cnt, ln.stopCnt(), "StopCnt");
+		assertEquals(delta, ln.delta, "Delta");
+		assertEquals(beg, ln.textCol(), "Beg");
+	}
+
+	@ParameterizedTest
+	@CsvFileSource(resources = "/line_multi_src1.csv", numLinesToSkip = 1)
+	void testMultiSrc1(int idx, int num, boolean blank, boolean block, boolean cmt0, int real, int cnt,
+			int delta, int beg) {
+
+		TS.widget.setText(src1);
+		Line ln = new Line(TS.viewer, TS.widget, map, num, TABWIDTH);
+
+		assertEquals(blank, ln.blank, "Blank");
+		assertEquals(block, ln.block, "Block");
+		assertEquals(cmt0, ln.cmt0, "Cmt0");
+		assertEquals(real, ln.info.num, "Real");
+		assertEquals(cnt, ln.stopCnt(), "Stop");
+		assertEquals(delta, ln.delta, "Delta");
+		assertEquals(beg, ln.textCol(), "Beg");
 	}
 }

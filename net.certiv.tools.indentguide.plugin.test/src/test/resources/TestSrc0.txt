@@ -1,0 +1,20 @@
+package net.certiv.guide;
+
+public class Test0 {
+
+	public void paint(int doc) {
+
+		if (doc == 1) {
+
+			/* block */
+			doc = 2;
+
+			doc = 3;
+			return;
+		}
+
+		doc = 3;
+
+	}
+
+}

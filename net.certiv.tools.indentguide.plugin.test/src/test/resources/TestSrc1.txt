@@ -1,0 +1,42 @@
+package net.certiv.guide;
+
+/**
+ *
+ * Block comment top level
+ */
+
+public class TestSrc3 {
+
+	/*
+	 * Block comment dented
+	 * 
+	 */
+	public void paint(int reason) {
+
+		int doc = reason;
+
+		// line comment
+		if (doc == 1) {
+
+			/* block */
+			
+//
+
+
+			doc = 2;
+
+			return;
+
+//
+
+
+			
+		}
+
+		doc = 3;
+
+
+//
+	}
+
+}
