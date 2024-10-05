@@ -1,4 +1,13 @@
-## IndentGuide Plugin for Eclipse
+# IndentGuide Plugin for Eclipse
+An Eclipse desktop plugin that provides visual indention markers in source code editors.
+
+## About This Fork
+
+This repository was originally forked from [grosenberg/IndentGuide](https://github.com/grosenberg/IndentGuide) to experiment with enhancing and/or improving the plugin. The plugin is not considered ready to use in any Eclipse desktop release (as of 2024.10.05). 
+
+## Original Readme Contents
+
+Contents within this section from the original repository README.md at [grosenberg/IndentGuide](https://github.com/grosenberg/IndentGuide).
 
 ### Description
 
